@@ -9,6 +9,7 @@
 import FormData from 'form-data';
 import { BaseClient } from './base-client.js';
 import { httpFetch } from '../utils/http-fetch.js';
+import { sanitizeFileName, sanitizeMimeType } from '../utils/file-name-guard.js';
 import type { AuthManager } from '../auth/auth-manager.js';
 import type { SynologyConfig } from '../types/index.js';
 import type { SynoMailFolder, SynoMailMessage } from '../types/synology-types.js';
@@ -284,7 +285,12 @@ export class MailPlusClient extends BaseClient {
     if (opts.attachments !== undefined) {
       for (const att of opts.attachments) {
         const buf = Buffer.from(att.content_base64, 'base64');
-        form.append('attachment', buf, { filename: att.name, contentType: att.mime_type });
+        // Attachment names and MIME types land in HTTP headers — sanitise
+        // them so a crafted name cannot inject additional header lines.
+        form.append('attachment', buf, {
+          filename: sanitizeFileName(att.name),
+          contentType: sanitizeMimeType(att.mime_type),
+        });
       }
     }
 

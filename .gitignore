@@ -32,10 +32,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# package manager
+# package manager — pnpm-lock.yaml IS committed (reproducible builds).
+# The other lockfiles are ignored so a stray npm/yarn install cannot replace it.
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
 
 # semantic-release
 .nyc_output
@@ -100,3 +100,11 @@ worktrees/
 .opencode.backup/
 
 data/
+
+# Release manifest — generated from the author's local workspace, not from this
+# repo. Must never be committed (it enumerates unrelated project files).
+release-manifest.json
+
+# Local security audit artefacts (generated, not source)
+security-audit-report.html
+.trae-html-share-packages/

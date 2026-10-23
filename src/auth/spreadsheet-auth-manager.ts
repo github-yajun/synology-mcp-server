@@ -29,17 +29,27 @@ interface AuthorizeErrorBody {
  * - Supports explicit invalidation (on 401 responses) followed by re-login.
  * - Uses an `undici.Agent` to bypass TLS validation when config.ignoreCert is true.
  *
- * Token TTL: 28 days per spec — token is tied to the DSM session, so it
+ * Token TTL: the API issues 28-day tokens, but this client caches them for a
+ * much shorter local lifetime — the token is tied to the DSM session, so it
  * also becomes invalid if DSM restarts or the user is forcibly logged out.
- * The server does not return an explicit expiry, so we cache locally for 28 days.
+ * The server does not return an explicit expiry, so we cache locally and
+ * revoke the token on shutdown.
  */
 export class SpreadsheetAuthManager {
   private readonly cache: TokenCache;
   private readonly config: SynologyConfig;
   private readonly dispatcher: Agent | undefined;
 
-  /** 28 days in milliseconds */
-  private static readonly DEFAULT_SPREADSHEET_TTL_MS = 28 * 24 * 60 * 60 * 1000;
+  /**
+   * Default token lifetime: 24 hours.
+   *
+   * The Spreadsheet API does not return an explicit expiry, so the lifetime
+   * is tracked locally. It is deliberately kept close to the DSM session
+   * lifetime (23h) rather than the API's nominal 28 days: a long-lived JWT
+   * that is never revoked keeps a usable credential alive long after the
+   * process that obtained it is gone.
+   */
+  private static readonly DEFAULT_SPREADSHEET_TTL_MS = 24 * 60 * 60 * 1000;
 
   constructor(config: SynologyConfig) {
     this.config = config;
@@ -145,6 +155,12 @@ export class SpreadsheetAuthManager {
       // operators don't chase ghosts in the MCP layer. Listed in observed
       // frequency: TLS verify failure (the container ships without DSM's
       // self-signed CA) is the most common in homelab setups.
+      //
+      // SECURITY: this hint names the DSM host, port, protocol and the
+      // authenticated username. That is an account-enumeration and
+      // network-topology leak once the message reaches the MCP client (and
+      // from there, the LLM's context). Keep the diagnostic detail in the
+      // server log; the client only ever sees a generic failure.
       const dsmTarget = `${this.config.spreadsheetDsmHttps ? 'https' : 'http'}://${this.buildDsmHostField()}`;
       const hint =
         response.status === 401
@@ -156,7 +172,12 @@ export class SpreadsheetAuthManager {
             `(4) the user lacks Synology Office / Spreadsheet privilege (Control Panel → Application Privileges); ` +
             `(5) wrong DSM credentials. NOTE: the /spreadsheets/authorize endpoint does not accept OTP — for 2FA accounts, use a dedicated service account without 2FA.`
           : '';
-      throw new AuthError(`Spreadsheet API auth failed: ${detail}${hint}`);
+      this.logAuthFailure(response.status, detail, hint, dsmTarget);
+      throw new AuthError(
+        response.status === 401
+          ? 'Spreadsheet API authentication failed. Check the server log for details.'
+          : `Spreadsheet API auth failed: ${detail}`,
+      );
     }
 
     let payload: AuthorizeOkBody;
@@ -194,5 +215,24 @@ export class SpreadsheetAuthManager {
   private buildBaseUrl(): string {
     const proto = this.config.spreadsheetHttps ? 'https' : 'http';
     return `${proto}://${this.config.spreadsheetHost}:${this.config.spreadsheetPort}`;
+  }
+
+  /**
+   * Emits the detailed diagnostic for a failed authorize call to stderr.
+   *
+   * The detail names the DSM host, port, protocol and username, so it must
+   * never reach the MCP client — it goes to the server log only. The log
+   * line is written directly (rather than through the JSON logger) because
+   * the auth manager is constructed before any logger exists.
+   */
+  private logAuthFailure(status: number, detail: string, hint: string, dsmTarget: string): void {
+    try {
+      process.stderr.write(
+        `[spreadsheet-auth] authorize failed (HTTP ${status}): ${detail}${hint} ` +
+          `[dsm_target=${dsmTarget}]\n`,
+      );
+    } catch {
+      // Logging must never break the auth flow
+    }
   }
 }

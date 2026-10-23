@@ -10,6 +10,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { verifyBearer } from '../utils/bearer-auth.js';
 import { isOriginAllowed } from '../utils/origin-guard.js';
+import { allowedHostnames, isHostAllowed } from '../utils/host-guard.js';
 
 /** Active SSE transports keyed by session ID. */
 const activeTransports = new Map<string, SSEServerTransport>();
@@ -21,6 +22,12 @@ export interface SseTransportOptions {
   authToken?: string;
   /** Allowed Origin values; if empty, only loopback no-Origin requests pass. */
   allowedOrigins?: string[];
+  /**
+   * Additional hostnames accepted in the `Host` header, beyond the bound
+   * host. Required when the server binds a wildcard address (0.0.0.0) and
+   * is reached over the LAN under a real hostname.
+   */
+  allowedHosts?: string[];
 }
 
 /**
@@ -36,16 +43,27 @@ export function startSseTransport(
   opts: SseTransportOptions,
 ): { httpServer: http.Server; close: () => Promise<void> } {
   const allowedOrigins = opts.allowedOrigins ?? [];
+  const permittedHosts = allowedHostnames(opts.host, opts.allowedHosts ?? []);
 
   const httpServer = http.createServer((req, res) => {
     const url = req.url ?? '';
     // http.IncomingHttpHeaders types 'origin'/'authorization' as string | undefined.
     const origin = req.headers['origin'];
     const auth = req.headers['authorization'];
+    const host = req.headers['host'];
 
     // ------------------------------------------------------------------
     // Security checks common to all routes
     // ------------------------------------------------------------------
+    // Host validation comes first: it is the DNS-rebinding defence, and a
+    // request with an unexpected Host must be rejected before any other
+    // header is inspected.
+    if (!isHostAllowed(host, permittedHosts)) {
+      res.writeHead(421, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Misdirected Request' }));
+      return;
+    }
+
     if (!isOriginAllowed(origin, allowedOrigins, opts.host)) {
       res.writeHead(403, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Forbidden: Origin not allowed' }));
@@ -88,8 +106,9 @@ export function startSseTransport(
       const transport = activeTransports.get(sessionId);
 
       if (transport === undefined) {
+        // Do not echo the session id — it enables session enumeration.
         res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: `Session not found: ${sessionId}` }));
+        res.end(JSON.stringify({ error: 'Session not found' }));
         return;
       }
 

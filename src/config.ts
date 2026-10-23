@@ -112,6 +112,41 @@ const AppConfigSchema = z.object({
     .optional()
     .transform((v) => (v === undefined || v === '' ? '127.0.0.1' : v)),
   MCP_AUTH_TOKEN: z.string().optional(),
+  /**
+   * Comma-separated list of exact Origin values permitted on SSE requests.
+   * Required for any deployment where browsers reach the server directly
+   * (the Origin guard rejects every request that carries an Origin header
+   * unless it is listed here).
+   */
+  MCP_ALLOWED_ORIGINS: z
+    .string()
+    .optional()
+    .transform((v): string[] | undefined => {
+      if (v === undefined || v.trim() === '') return undefined;
+      const list = v
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s !== '');
+      return list.length > 0 ? list : undefined;
+    }),
+  /**
+   * Comma-separated list of additional hostnames accepted in the `Host`
+   * header. Required when MCP_SSE_HOST is a wildcard address (0.0.0.0) and
+   * the server is reached over the LAN under a real hostname — the Host
+   * header is what blocks DNS rebinding, so it must name the address the
+   * operator actually serves.
+   */
+  MCP_ALLOWED_HOSTS: z
+    .string()
+    .optional()
+    .transform((v): string[] | undefined => {
+      if (v === undefined || v.trim() === '') return undefined;
+      const list = v
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s !== '');
+      return list.length > 0 ? list : undefined;
+    }),
 
   // Logging
   LOG_LEVEL: z
@@ -205,6 +240,10 @@ export function loadConfig(): AppConfig {
       ssePort: env.MCP_SSE_PORT,
       sseHost: env.MCP_SSE_HOST,
       ...(env.MCP_AUTH_TOKEN ? { authToken: env.MCP_AUTH_TOKEN } : {}),
+      ...(env.MCP_ALLOWED_ORIGINS !== undefined
+        ? { allowedOrigins: env.MCP_ALLOWED_ORIGINS }
+        : {}),
+      ...(env.MCP_ALLOWED_HOSTS !== undefined ? { allowedHosts: env.MCP_ALLOWED_HOSTS } : {}),
     },
     features: {
       drive: env.SYNO_ENABLE_DRIVE,

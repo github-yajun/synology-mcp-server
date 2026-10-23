@@ -173,7 +173,12 @@ All configuration is via environment variables, validated by [Zod](https://zod.d
 |---|---|
 | `SYNO_HOST` | NAS hostname or IP (`192.168.1.100` or `nas.local`) |
 | `SYNO_USERNAME` | DSM account username |
-| `SYNO_PASSWORD` | DSM account password (use an app-specific password if 2FA is enabled) |
+| `SYNO_PASSWORD` | DSM account password |
+
+> **2FA:** DSM has no app-specific / application passwords. For unattended
+> automation use a **dedicated service account without 2FA** — the Spreadsheet
+> `/authorize` endpoint does not accept an OTP code. See
+> [security-model.md](./security-model.md#two-factor-authentication).
 
 ### Common optional
 
@@ -182,12 +187,16 @@ All configuration is via environment variables, validated by [Zod](https://zod.d
 | `SYNO_PORT` | `5001` | DSM port (`5000` HTTP, `5001` HTTPS) |
 | `SYNO_HTTPS` | `true` | Use HTTPS |
 | `SYNO_IGNORE_CERT` | `false` | Accept self-signed cert (trusted home NAS only) |
-| `SYNO_OTP_CODE` | — | 2FA TOTP code (prefer app-specific passwords instead) |
+| `SYNO_OTP_CODE` | — | 2FA TOTP code (single-session only) |
 | `MCP_TRANSPORT` | `stdio` | `stdio` or `sse` |
 | `MCP_SSE_HOST` | `127.0.0.1` | Bind address for SSE |
 | `MCP_SSE_PORT` | `3100` | Port for SSE |
 | `MCP_AUTH_TOKEN` | — | **Required** when `MCP_SSE_HOST` is non-loopback |
+| `MCP_ALLOWED_HOSTS` | — | Extra hostnames accepted in the `Host` header (required for a wildcard bind) |
+| `MCP_ALLOWED_ORIGINS` | — | Exact origins allowed to issue SSE requests (comma-separated) |
+| `SYNO_DRIVE_ROOTS` | `/mydrive,/team-folders,/home` | Drive roots a path may address |
 | `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
+| `LOG_FILE` | — | Also append log lines to this file |
 
 > **Warning:** `SYNO_IGNORE_CERT=true` disables MITM protection. Only use it on trusted home networks with self-signed certs you control.
 

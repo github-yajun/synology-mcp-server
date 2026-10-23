@@ -4,6 +4,7 @@
  * No external dependencies — intentionally tiny per project constraints.
  */
 
+import { appendFileSync } from 'node:fs';
 import { redactSensitive } from './redact.js';
 
 /** Ordered numeric priorities for level filtering. */
@@ -26,6 +27,16 @@ export interface Logger {
   error(msg: string, meta?: Record<string, unknown>): void;
 }
 
+/** Optional logger configuration. */
+export interface LoggerOptions {
+  /**
+   * Absolute or relative path to a log file. When set, every emitted entry is
+   * appended to this file in addition to stderr. File writes are best-effort:
+   * a failure must never crash the server.
+   */
+  filePath?: string;
+}
+
 /**
  * Creates a stderr JSON logger filtered to the given minimum level.
  *
@@ -36,10 +47,15 @@ export interface Logger {
  * serialization so credentials never appear in logs.
  *
  * @param level - Minimum level to emit. Messages below this are silently dropped.
+ * @param opts - Optional file sink configuration.
  * @returns Logger instance.
  */
-export function createLogger(level: 'debug' | 'info' | 'warn' | 'error'): Logger {
+export function createLogger(
+  level: 'debug' | 'info' | 'warn' | 'error',
+  opts: LoggerOptions = {},
+): Logger {
   const minPriority = LEVEL_PRIORITY[level] ?? 1;
+  const filePath = opts.filePath;
 
   function emit(msgLevel: string, msg: string, meta?: Record<string, unknown>): void {
     const priority = LEVEL_PRIORITY[msgLevel] ?? 1;
@@ -55,10 +71,27 @@ export function createLogger(level: 'debug' | 'info' | 'warn' | 'error'): Logger
       entry['meta'] = redactSensitive(meta);
     }
 
+    let line: string;
     try {
-      process.stderr.write(JSON.stringify(entry) + '\n');
+      line = JSON.stringify(entry) + '\n';
+    } catch {
+      // Unserializable meta — fall back to a minimal entry rather than crash.
+      line =
+        JSON.stringify({ ts: entry['ts'], level: msgLevel, msg, meta: '[UNSERIALIZABLE]' }) + '\n';
+    }
+
+    try {
+      process.stderr.write(line);
     } catch {
       // Suppress serialization errors — never crash the process for logging
+    }
+
+    if (filePath !== undefined) {
+      try {
+        appendFileSync(filePath, line, { encoding: 'utf8', mode: 0o600 });
+      } catch {
+        // Best-effort file sink — never crash the process for logging
+      }
     }
   }
 

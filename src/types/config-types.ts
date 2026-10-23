@@ -57,6 +57,10 @@ export interface McpConfig {
   sseHost: string;
   /** Optional shared secret for SSE mode authentication */
   authToken?: string;
+  /** Exact Origin values permitted on SSE requests; empty means loopback-only */
+  allowedOrigins?: string[];
+  /** Additional hostnames accepted in the `Host` header on SSE requests */
+  allowedHosts?: string[];
 }
 
 /** Feature flags controlling which Synology modules are active */

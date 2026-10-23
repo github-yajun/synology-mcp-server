@@ -65,7 +65,9 @@ export class SpreadsheetIdCache {
       throw new NameNotFoundError(name);
     }
     if (matches.length === 1) {
-      return matches[0]!.spreadsheetId;
+      const only = matches[0];
+      if (only !== undefined) return only.spreadsheetId;
+      throw new NameNotFoundError(name);
     }
     if (drivePath !== undefined) {
       const exact = matches.find((e) => e.path === drivePath);
@@ -141,8 +143,14 @@ export class SpreadsheetIdCache {
   }
 
   private async save(data: CacheFile): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+    // The cache lists file names and Drive paths — business data, not
+    // credentials, but it is still a private inventory. Restrict it to the
+    // owning user.
+    await fs.mkdir(path.dirname(this.filePath), { recursive: true, mode: 0o700 });
+    await fs.writeFile(this.filePath, JSON.stringify(data, null, 2) + '\n', {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
     this.cache = data;
   }
 }

@@ -15,21 +15,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Actions are pinned to commit SHAs, not floating tags, so a compromised
+      # or hijacked tag cannot alter the build. Bump with:
+      #   gh api repos/<owner>/<repo>/git/ref/tags/<tag> --jq .object.sha
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
+      # pnpm-lock.yaml is committed, so --frozen-lockfile installs exactly the
+      # reviewed dependency tree. A lockfile that drifts from package.json
+      # fails the job instead of silently resolving newer versions.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

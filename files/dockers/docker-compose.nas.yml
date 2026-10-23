@@ -4,10 +4,16 @@
 #
 # network_mode: host so 127.0.0.1 inside the container = DSM loopback,
 # letting the MCP server hit DSM APIs without LAN round-trips.
+#
+# SECURITY: host networking publishes the SSE port on every NAS interface.
+# Set MCP_AUTH_TOKEN in .env — the server refuses to start on a non-loopback
+# bind without it — and set MCP_ALLOWED_HOSTS to the names clients actually
+# use to reach the NAS. The Host header guard rejects every other Host value,
+# which is what blocks DNS-rebinding attempts against the NAS address.
 
 services:
   synology-mcp:
-    image: synology-office-mcp:0.2.0
+    image: synology-office-mcp:0.5.0
     container_name: synology-office-mcp
     restart: unless-stopped
     network_mode: host

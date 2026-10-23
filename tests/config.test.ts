@@ -58,6 +58,8 @@ describe('loadConfig', () => {
     'MCP_SSE_PORT',
     'MCP_SSE_HOST',
     'MCP_AUTH_TOKEN',
+    'MCP_ALLOWED_ORIGINS',
+    'MCP_ALLOWED_HOSTS',
     'LOG_LEVEL',
     'LOG_FILE',
   ];
@@ -206,6 +208,49 @@ describe('loadConfig', () => {
       const { loadConfig } = await import('../src/config.js?v=sse-loopback');
       const cfg = loadConfig();
       expect(cfg.mcp.transport).toBe('sse');
+    } finally {
+      restore();
+    }
+  });
+
+  it('parses MCP_ALLOWED_ORIGINS into a trimmed list', async () => {
+    const restore = withEnv({
+      ...VALID_ENV,
+      MCP_TRANSPORT: 'sse',
+      MCP_ALLOWED_ORIGINS: 'http://a.example.com, http://b.example.com ,',
+    });
+    try {
+      const { loadConfig } = await import('../src/config.js?v=origins');
+      const cfg = loadConfig();
+      expect(cfg.mcp.allowedOrigins).toEqual(['http://a.example.com', 'http://b.example.com']);
+    } finally {
+      restore();
+    }
+  });
+
+  it('leaves MCP_ALLOWED_ORIGINS undefined when unset or blank', async () => {
+    const restore = withEnv({ ...VALID_ENV, MCP_ALLOWED_ORIGINS: '   ' });
+    try {
+      const { loadConfig } = await import('../src/config.js?v=origins-blank');
+      const cfg = loadConfig();
+      expect(cfg.mcp.allowedOrigins).toBeUndefined();
+    } finally {
+      restore();
+    }
+  });
+
+  it('parses MCP_ALLOWED_HOSTS into a trimmed list', async () => {
+    const restore = withEnv({
+      ...VALID_ENV,
+      MCP_TRANSPORT: 'sse',
+      MCP_SSE_HOST: '0.0.0.0',
+      MCP_AUTH_TOKEN: 'strong-shared-secret',
+      MCP_ALLOWED_HOSTS: 'nas.local, 192.168.1.100',
+    });
+    try {
+      const { loadConfig } = await import('../src/config.js?v=hosts');
+      const cfg = loadConfig();
+      expect(cfg.mcp.allowedHosts).toEqual(['nas.local', '192.168.1.100']);
     } finally {
       restore();
     }

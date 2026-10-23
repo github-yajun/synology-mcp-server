@@ -172,3 +172,30 @@ describe('SSE transport — routing', () => {
     expect(status).toBe(404);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Host header guard — DNS rebinding protection
+// ---------------------------------------------------------------------------
+
+describe('SSE transport — Host guard', () => {
+  it('rejects a request with an unexpected Host header → 421', async () => {
+    port = await startServer(undefined);
+    // Simulates a DNS rebinding attack: the browser resolves evil.com to
+    // 127.0.0.1 and sends a request whose Host header names the attacker's
+    // domain instead of the address the server actually serves.
+    const status = await get(port, '/sse', { Host: 'evil.example.com' });
+    expect(status).toBe(421);
+  });
+
+  it('accepts a request with the loopback Host header', async () => {
+    port = await startServer(undefined);
+    const status = await get(port, '/sse', { Host: `127.0.0.1:${port}` });
+    expect(status).not.toBe(421);
+  });
+
+  it('accepts the localhost spelling of the loopback Host header', async () => {
+    port = await startServer(undefined);
+    const status = await get(port, '/sse', { Host: `localhost:${port}` });
+    expect(status).not.toBe(421);
+  });
+});

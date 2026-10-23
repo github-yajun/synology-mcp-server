@@ -16,6 +16,7 @@ import { aggregateTools } from './tools/index.js';
 import { createServer } from './server/create-server.js';
 import { startStdioTransport } from './server/transport-stdio.js';
 import { startSseTransport } from './server/transport-sse.js';
+import { createLogger } from './utils/logger.js';
 import type { ToolContext } from './tools/types.js';
 
 // ---------------------------------------------------------------------------
@@ -82,6 +83,36 @@ async function main(): Promise<void> {
     `synology-office-mcp starting — transport: ${transportInfo}${authInfo}, NAS: ${config.synology.host}:${config.synology.port}\n`,
   );
 
+  // Structured logger — meta is redacted by redactSensitive() before emission.
+  const logger = createLogger(
+    config.logLevel,
+    config.logFile !== undefined ? { filePath: config.logFile } : {},
+  );
+
+  // Audit trail for security-relevant configuration changes.
+  if (config.synology.ignoreCert) {
+    logger.warn('TLS certificate verification DISABLED for NAS connections', {
+      host: config.synology.host,
+      port: config.synology.port,
+    });
+  }
+  if (config.mcp.transport === 'sse' && config.mcp.authToken === undefined) {
+    logger.warn('SSE transport started WITHOUT authentication token', {
+      host: config.mcp.sseHost,
+      port: config.mcp.ssePort,
+    });
+  }
+  if (config.mcp.transport === 'sse' && (config.mcp.allowedOrigins?.length ?? 0) === 0) {
+    logger.warn('SSE transport has no allowed origins configured — browser requests will be rejected', {
+      host: config.mcp.sseHost,
+    });
+  }
+  logger.info('Server starting', {
+    transport: config.mcp.transport,
+    nas: `${config.synology.host}:${config.synology.port}`,
+    features: config.features,
+  });
+
   // Build auth managers and clients
   const authManager = new AuthManager(config.synology);
   const spreadsheetAuthManager = new SpreadsheetAuthManager(config.synology);
@@ -113,13 +144,17 @@ async function main(): Promise<void> {
       if (sseClose !== undefined) {
         await sseClose();
       }
-      // 5s timeout on logout so a hung session never blocks exit
+      // 5s timeout on logout so a hung session never blocks exit.
+      // Both the DSM session and the Spreadsheet JWT are revoked — the JWT
+      // is valid for far longer than the DSM session, so leaving it alive
+      // would keep a usable credential valid after the process exits.
       await Promise.race([
-        authManager.logout(),
+        Promise.all([authManager.logout(), spreadsheetAuthManager.logout()]),
         new Promise<void>((_, reject) =>
           setTimeout(() => reject(new Error('logout timed out')), 5_000),
         ),
       ]);
+      logger.info('Sessions revoked');
     } catch {
       // Best-effort shutdown; errors are silenced
     }
@@ -137,6 +172,12 @@ async function main(): Promise<void> {
       host: config.mcp.sseHost,
       port: config.mcp.ssePort,
       ...(config.mcp.authToken !== undefined ? { authToken: config.mcp.authToken } : {}),
+      ...(config.mcp.allowedOrigins !== undefined
+        ? { allowedOrigins: config.mcp.allowedOrigins }
+        : {}),
+      ...(config.mcp.allowedHosts !== undefined
+        ? { allowedHosts: config.mcp.allowedHosts }
+        : {}),
     });
     sseClose = close;
     process.stderr.write(

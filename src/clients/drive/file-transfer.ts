@@ -6,6 +6,7 @@
 import FormData from 'form-data';
 import type { Agent } from 'undici';
 import { sanitizePath } from '../../utils/path-guard.js';
+import { sanitizeFileName, sanitizeMimeType } from '../../utils/file-name-guard.js';
 import { NetworkError } from '../../errors.js';
 import { mapSynologyError } from '../../utils/synology-error-map.js';
 import { httpFetch, type FetchResponse } from '../../utils/http-fetch.js';
@@ -43,7 +44,12 @@ export async function upload(deps: TransferDeps, opts: UploadOpts): Promise<Driv
   form.append('dest_folder_path', sanitizePath(opts.dest_folder_path));
   form.append('conflict_action', opts.conflict_action);
   form.append('_sid', sid);
-  form.append('file', buffer, { filename: opts.file_name, contentType: opts.mime_type });
+  // The filename and MIME type come from tool input and land in HTTP headers;
+  // sanitise them so they cannot inject additional header lines.
+  form.append('file', buffer, {
+    filename: sanitizeFileName(opts.file_name),
+    contentType: sanitizeMimeType(opts.mime_type),
+  });
 
   const qs = new URLSearchParams({
     api: 'SYNO.SynologyDrive.Files',

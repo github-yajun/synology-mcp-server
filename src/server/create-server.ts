@@ -18,10 +18,18 @@ import type { ToolDefinition, ToolContext } from '../tools/types.js';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema.js';
 import * as resources from '../resources/index.js';
 import * as prompts from '../prompts/index.js';
+import packageJson from '../../package.json' with { type: 'json' };
 
 /** Package metadata used in MCP server info. */
 const SERVER_NAME = 'synology-office-mcp';
-const SERVER_VERSION = '0.2.0';
+/**
+ * Server version reported in the MCP handshake.
+ *
+ * Sourced from package.json so it can never drift from the published
+ * version — a client that sees a stale version cannot tell whether a
+ * published security fix is present.
+ */
+const SERVER_VERSION = packageJson.version;
 
 /**
  * Creates and configures an MCP Server with all handlers wired.

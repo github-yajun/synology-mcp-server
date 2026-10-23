@@ -51,7 +51,7 @@
   "mcpServers": {
     "synology-office": {
       "command": "npx",
-      "args": ["-y", "synology-office-mcp"],
+      "args": ["-y", "synology-office-mcp@0.4.6"],
       "env": {
         "SYNO_HOST": "${user_config.syno_host}",
         "SYNO_USERNAME": "${user_config.syno_username}",

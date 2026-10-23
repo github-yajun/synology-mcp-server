@@ -3,12 +3,17 @@
 #   cp .env.example .env   # populate SYNO_* values
 #   docker compose -f files/dockers/docker-compose.local.yml up -d
 #
-# Binds SSE to 127.0.0.1 only. For LAN exposure, set MCP_AUTH_TOKEN
-# and change the published port to "0.0.0.0:3100:3100".
+# The published port is bound to 127.0.0.1 only, so the server is reachable
+# from this machine alone. The container binds 0.0.0.0 internally (a
+# container's loopback is not the host's), and the Host header guard accepts
+# the loopback names plus anything listed in MCP_ALLOWED_HOSTS.
+#
+# For LAN exposure, set MCP_AUTH_TOKEN, add the reachable names to
+# MCP_ALLOWED_HOSTS, and change the published port to "0.0.0.0:3100:3100".
 
 services:
   synology-mcp:
-    image: synology-office-mcp:0.2.0
+    image: synology-office-mcp:0.5.0
     build:
       context: ../..
       dockerfile: files/dockers/Dockerfile

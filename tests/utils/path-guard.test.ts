@@ -37,8 +37,38 @@ describe('sanitizePath', () => {
     expect(() => sanitizePath('   ')).toThrow(ValidationError);
   });
 
-  it('accepts relative paths without traversal', () => {
-    // Relative paths without .. are safe even if unusual for Drive
-    expect(() => sanitizePath('reports/q1')).not.toThrow();
+  it('rejects relative paths outside the permitted Drive roots', () => {
+    // Relative paths are no longer accepted: every Drive path must live
+    // under a configured root (/mydrive, /team-folders, /home).
+    expect(() => sanitizePath('reports/q1')).toThrow(ValidationError);
+  });
+
+  it('accepts paths under a permitted Drive root', () => {
+    expect(sanitizePath('/mydrive/reports/q1')).toBe('/mydrive/reports/q1');
+    expect(sanitizePath('/team-folders/reports')).toBe('/team-folders/reports');
+  });
+
+  it('rejects paths outside the permitted Drive roots', () => {
+    // Path traversal is blocked, but so is any absolute path that does not
+    // live under a configured root — otherwise the server could be used to
+    // probe other users' spaces or other volumes.
+    expect(() => sanitizePath('/homes/otheruser/secret.txt')).toThrow(ValidationError);
+    expect(() => sanitizePath('/volume2/private')).toThrow(ValidationError);
+    expect(() => sanitizePath('/etc.defaults/VERSION')).toThrow(ValidationError);
+  });
+
+  it('reports PATH_OUT_OF_SCOPE for out-of-root paths', () => {
+    try {
+      sanitizePath('/homes/otheruser/secret.txt');
+      expect.fail('expected to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ValidationError);
+      expect((err as ValidationError).code).toBe('PATH_OUT_OF_SCOPE');
+    }
+  });
+
+  it('does not let a prefix-sharing root bypass the check', () => {
+    // '/mydrive-evil' must not be accepted just because '/mydrive' is.
+    expect(() => sanitizePath('/mydrive-evil/file.txt')).toThrow(ValidationError);
   });
 });
